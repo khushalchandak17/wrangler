@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -26,6 +27,10 @@ const (
 )
 
 var (
+	// stepCounterMessagePattern matches "X of Y completed" messages from CAPI infrastructure providers.
+	// These are from the deprecated v1beta1 conditions merge strategy and are not useful to end users.
+	stepCounterMessagePattern = regexp.MustCompile(`^\d+ of \d+ completed$`)
+
 	// True ==
 	// False == error
 	// Unknown == transitioning
@@ -466,6 +471,9 @@ func checkCAPIMachineTransitioning(conditions []Condition, summary Summary) Summ
 				if strings.HasSuffix(detail, "status.initialization.provisioned is false") {
 					detail = ""
 				}
+				if stepCounterMessagePattern.MatchString(detail) {
+					detail = ""
+				}
 				if detail != "" {
 					summary.Message = append(summary.Message, detail)
 				}
@@ -784,6 +792,12 @@ func checkGenericTransitioning(_ data.Object, conditions []Condition, summary Su
 		if c.Type() == "Ready" && c.Status() == "False" {
 			ready = false
 			readyMessage = c.Message()
+
+			// ignore the message that is in the form of "x of y completed",
+			// seen on AWSMachine.infrastructure.cluster.x-k8s.io/v1beta2
+			if stepCounterMessagePattern.MatchString(c.Message()) {
+				readyMessage = ""
+			}
 			continue
 		}
 		newState, ok := TransitioningFalse[c.Type()]
