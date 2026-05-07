@@ -1,25 +1,35 @@
-name: Release
+name: On release
 
 on:
-  push:
-    tags:
-      - v*
+  workflow_dispatch:
+
+permissions: {}
 
 jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure ref is a tag
+        run: |
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "::error::This workflow must be dispatched on a tag ref (got ${GITHUB_REF_TYPE} '${GITHUB_REF}')"
+            exit 1
+          fi
+
   release:
+    needs: guard
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name : Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create release on Github
+      - name: Create GitHub Release
         env:
-          GH_TOKEN:  ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.ref_name }}
         run: |
-          if [[ "${{ github.ref_name }}" == *-rc* ]]; then
-            gh --repo "${{ github.repository }}" release create ${{ github.ref_name }} --verify-tag --generate-notes --prerelease
-          else
-            gh --repo "${{ github.repository }}" release create ${{ github.ref_name }} --verify-tag --generate-notes
-          fi
+          flags="--verify-tag --generate-notes"
+          [[ "$VERSION" == *-rc* ]] && flags="$flags --prerelease"
+          gh --repo "$GITHUB_REPOSITORY" release create "$VERSION" $flags
